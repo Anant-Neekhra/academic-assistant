@@ -10,11 +10,11 @@ import {
   ChevronLeft,
   PanelLeftClose,
   PanelLeftOpen,
+  FileText,
+  MessageSquare,
 } from "lucide-react";
 import { useState } from "react";
 
-// Dynamically import PdfViewer — disables SSR for this component
-// because pdf.js requires browser APIs (window, canvas, etc.)
 const PdfViewer = dynamic(
   () => import("@/components/pdf-viewer").then((mod) => mod.PdfViewer),
   {
@@ -33,20 +33,24 @@ interface ChatPageClientProps {
   fileUrl: string;
 }
 
+// Which panel is visible on mobile
+type MobileTab = "pdf" | "chat";
+
 export function ChatPageClient({ docTitle, fileUrl }: ChatPageClientProps) {
   const [pdfPanelOpen, setPdfPanelOpen] = useState(true);
+  const [mobileTab, setMobileTab] = useState<MobileTab>("chat");
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* ── Top nav ── */}
-      <header className="flex items-center gap-3 px-4 h-12 border-b border-border shrink-0 bg-background/90 backdrop-blur-md">
+      <header className="flex items-center gap-2 px-3 md:px-4 h-12 border-b border-border shrink-0 bg-background/90 backdrop-blur-md">
         <Link href="/dashboard">
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
             <ChevronLeft className="w-4 h-4" />
           </Button>
         </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <div className="w-6 h-6 rounded bg-primary flex items-center justify-center">
             <BookOpen className="w-3 h-3 text-primary-foreground" />
           </div>
@@ -58,16 +62,19 @@ export function ChatPageClient({ docTitle, fileUrl }: ChatPageClientProps) {
           </span>
         </div>
 
-        <span className="text-muted-foreground/40">·</span>
-        <span className="text-xs text-muted-foreground truncate max-w-xs">
+        <span className="text-muted-foreground/40 hidden sm:block">·</span>
+
+        {/* Title — truncates gracefully on small screens */}
+        <span className="text-xs text-muted-foreground truncate flex-1 min-w-0">
           {docTitle}
         </span>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* Toggle PDF panel — desktop only */}
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 hidden md:flex"
             onClick={() => setPdfPanelOpen(!pdfPanelOpen)}
             title={pdfPanelOpen ? "Hide PDF panel" : "Show PDF panel"}
           >
@@ -81,17 +88,70 @@ export function ChatPageClient({ docTitle, fileUrl }: ChatPageClientProps) {
         </div>
       </header>
 
-      {/* ── Split pane ── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: PDF Viewer */}
-        {pdfPanelOpen && (
-          <div className="w-[52%] flex flex-col border-r border-border min-w-0">
-            <PdfViewer fileUrl={fileUrl} title={docTitle} />
-          </div>
-        )}
+      {/* ── Mobile tab switcher ── */}
+      <div className="flex md:hidden border-b border-border shrink-0 bg-background">
+        <button
+          onClick={() => setMobileTab("pdf")}
+          className={`
+            flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium
+            border-b-2 transition-colors duration-150
+            ${
+              mobileTab === "pdf"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }
+          `}
+        >
+          <FileText className="w-4 h-4" />
+          PDF
+        </button>
+        <button
+          onClick={() => setMobileTab("chat")}
+          className={`
+            flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium
+            border-b-2 transition-colors duration-150
+            ${
+              mobileTab === "chat"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }
+          `}
+        >
+          <MessageSquare className="w-4 h-4" />
+          Chat
+        </button>
+      </div>
 
-        {/* Right: Chat */}
-        <div className="flex-1 flex flex-col min-w-0">
+      {/* ── Content area ── */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* ── LEFT: PDF Viewer ──
+            - Mobile: full width, shown only when mobileTab === "pdf"
+            - Desktop: fixed 52% width, toggled by pdfPanelOpen button  */}
+        <div
+          className={`
+            flex flex-col border-border min-w-0 overflow-hidden
+            transition-all duration-200
+            ${/* Mobile visibility */ mobileTab === "pdf" ? "flex" : "hidden"}
+            md:flex                          
+            ${
+              /* Desktop visibility */
+              pdfPanelOpen ? "md:w-[52%] md:border-r" : "md:w-0 md:hidden"
+            }
+          `}
+        >
+          <PdfViewer fileUrl={fileUrl} title={docTitle} />
+        </div>
+
+        {/* ── RIGHT: Chat ──
+            - Mobile: full width, shown only when mobileTab === "chat"
+            - Desktop: takes remaining space  */}
+        <div
+          className={`
+            flex-col min-w-0 overflow-hidden
+            ${mobileTab === "chat" ? "flex" : "hidden"}
+            md:flex md:flex-1
+          `}
+        >
           <ChatWindow docTitle={docTitle} />
         </div>
       </div>
