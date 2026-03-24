@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from pipeline import ingest_document, query_document
+from pipeline import ingest_document, query_document, delete_document_index
 import os
 
 load_dotenv()
@@ -102,5 +102,23 @@ def query(req: QueryRequest, x_internal_token: str = Header(...)):
         )
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/document/{doc_id}")
+def delete_document(doc_id: str, x_internal_token: str = Header(...)):
+    """
+    Called by Next.js when a user deletes a document.
+    Removes the FAISS index from disk.
+    """
+    verify_internal_token(x_internal_token)
+
+    try:
+        existed = delete_document_index(doc_id)
+        return {
+            "success": True,
+            "doc_id": doc_id,
+            "index_existed": existed,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

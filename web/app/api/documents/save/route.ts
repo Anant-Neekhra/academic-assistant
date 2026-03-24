@@ -8,15 +8,64 @@ interface SaveDocumentBody {
   fileUrl: string;
 }
 
+// Calls the FastAPI /ingest endpoint in the background
+async function triggerIngestion(docId: string, fileUrl: string) {
+  const ragApiUrl = process.env.RAG_API_URL;
+  const secret = process.env.INTERNAL_API_SECRET;
+
+  if (!ragApiUrl || !secret) {
+    console.error(
+      "[INGEST] RAG_API_URL or INTERNAL_API_SECRET missing in .env.local",
+    );
+    return;
+  }
+
+  try {
+    const response = await fetch(`${ragApiUrl}/ingest`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-token": secret,
+      },
+      body: JSON.stringify({
+        doc_id: docId,
+        file_url: fileUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error("[INGEST] FastAPI returned error:", error);
+
+      // Mark the document as errored in MongoDB
+      await connectToDatabase();
+      await DocumentModel.findByIdAndUpdate(docId, { status: "error" });
+      return;
+    }
+
+    const data = await response.json();
+    console.log(
+      `[INGEST] Success — ${data.chunks_stored} chunks stored for doc ${docId}`,
+    );
+
+    // Mark the document as ready in MongoDB
+    await connectToDatabase();
+    await DocumentModel.findByIdAndUpdate(docId, { status: "ready" });
+  } catch (err) {
+    console.error("[INGEST] Failed to reach FastAPI server:", err);
+
+    await connectToDatabase();
+    await DocumentModel.findByIdAndUpdate(docId, { status: "error" });
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
-    // 1. Verify the user is authenticated
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2. Parse and validate the request body
     const body: SaveDocumentBody = await req.json();
     const { title, fileUrl } = body;
 
@@ -31,22 +80,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid file URL" }, { status: 400 });
     }
 
-    // 3. Connect to MongoDB and save the document
     await connectToDatabase();
 
+    // Save metadata — status starts as "processing"
     const newDocument = await DocumentModel.create({
       title: title.trim(),
       fileUrl,
       clerkUserId: userId,
-      status: "processing", // Will be updated after PDF processing (LangChain step)
+      status: "processing",
     });
 
-    // 4. Return the created document
+    const docId = newDocument._id.toString();
+
+    // Fire ingestion in the background — don't await it
+    // The upload dialog closes immediately, status flips to
+    // "ready" (or "error") on the dashboard once ingestion completes
+    triggerIngestion(docId, fileUrl);
+
     return NextResponse.json(
       {
         success: true,
         document: {
-          id: newDocument._id.toString(),
+          id: docId,
           title: newDocument.title,
           fileUrl: newDocument.fileUrl,
           status: newDocument.status,

@@ -3,6 +3,7 @@ from loader import load_document_from_url
 from chunker import split_documents
 from embedder import load_embedding_model
 from vector_store import create_vector_store
+import shutil
 
 # All FAISS indexes saved here, one file per document
 FAISS_STORE_PATH = os.path.join(os.path.dirname(__file__), "faiss_indexes")
@@ -77,3 +78,12 @@ def query_document(question: str, doc_id: str, top_k: int = 4) -> list[dict]:
         }
         for doc in docs
     ]
+
+def delete_document_index(doc_id: str) -> bool:
+    index_path = _index_path(doc_id)
+
+    if not os.path.exists(index_path):
+        return False  # Already gone — not an error
+
+    shutil.rmtree(index_path)
+    return True
