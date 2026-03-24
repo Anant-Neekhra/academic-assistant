@@ -2,3 +2,11 @@ langchain
 faiss-cpu
 sentence-transformers
 pypdf
+
+fastapi
+uvicorn[standard]
+python-dotenv
+requests
+huggingface-hub
+langchain-community
+langchain-huggingface
